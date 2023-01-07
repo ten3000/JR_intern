@@ -1,5 +1,6 @@
 package com.game.controller;
 
+import com.game.dto.PlayerDTO;
 import com.game.entity.Player;
 import com.game.entity.Profession;
 import com.game.entity.Race;
@@ -7,6 +8,7 @@ import com.game.service.PlayerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -58,15 +60,10 @@ public class PlayerController {
     }
 
     @GetMapping("/rest/players/{id}")
-    public ResponseEntity<Player> getPlayer(@PathVariable("id") String pathId) {
-        Long id = convertIdToLong(pathId);
-        if (id == null || id <= 0) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
+    public ResponseEntity<Player> getPlayer(@PathVariable("id") Long id) {
+        if (id == 0) return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         Player player = playerService.findOne(id);
-        if (player == null) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
+        if (player == null) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         return new ResponseEntity<>(player, HttpStatus.OK);
     }
 
@@ -80,44 +77,13 @@ public class PlayerController {
     }
 
     @PostMapping("rest/players/{id}")
-    public ResponseEntity<Player> updatePlayer(@RequestBody Player player, @PathVariable(value = "id") String pathId) {
-        if (!playerService.isPlayerValid(player)) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
-        ResponseEntity<Player> entity = getPlayer(pathId);
-        Player savedPlayer = entity.getBody();
-        if (savedPlayer == null) {
-            return entity;
-        }
-
-        Player result;
-        try {
-            result = playerService.update(savedPlayer, player);
-        } catch (IllegalArgumentException e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
-        return new ResponseEntity<>(result, HttpStatus.OK);
+    public Player updatePlayer(@RequestBody PlayerDTO playerDTO, @PathVariable(value = "id") Long id) {
+        playerService.validateId(id);
+        return playerService.update(playerDTO, id);
     }
 
     @DeleteMapping("/rest/players/{id}")
-    public ResponseEntity<Player> deletePlayer(@PathVariable("id") String pathId) {
-        Long id = convertIdToLong(pathId);
-        ResponseEntity<Player> entity = getPlayer(pathId);
-        Player player = entity.getBody();
-        if (player == null) {
-            return entity;
-        }
-        playerService.delete(id);
-        return new ResponseEntity<>(HttpStatus.OK);
-    }
-
-    private Long convertIdToLong(String pathId) {
-        if (pathId == null) {
-            return null;
-        } else try {
-            return Long.parseLong(pathId);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+    public ResponseEntity<Player> deletePlayer(@PathVariable("id") Long id) {
+        return playerService.delete(id);
     }
 }

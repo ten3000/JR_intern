@@ -1,14 +1,22 @@
 package com.game.service;
 
 import com.game.controller.PlayerOrder;
+import com.game.dto.PlayerDTO;
 import com.game.entity.Player;
 import com.game.entity.Profession;
 import com.game.entity.Race;
+import com.game.exception.InvalidIdException;
+import com.game.exception.NoSuchPlayerException;
+import com.game.exception.ValidationException;
 import com.game.repository.PlayerRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -91,52 +99,103 @@ public class PlayerService {
     }
 
     @Transactional
-    public void save(Player player) {
+    public ResponseEntity<Player> save(Player player) {
         player.setExperience(player.getExperience());
         playerRepository.save(player);
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 
     @Transactional
-    public Player update(Player player, Player updatedPlayer) throws IllegalArgumentException {
-        if (updatedPlayer.getName() != null) player.setName(updatedPlayer.getName());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getTitle() != null) player.setTitle(updatedPlayer.getTitle());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getRace() != null) player.setRace(updatedPlayer.getRace());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getProfession() != null) player.setProfession(updatedPlayer.getProfession());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getBirthday() != null) player.setBirthday(updatedPlayer.getBirthday());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getBanned() != null) player.setBanned(updatedPlayer.getBanned());
-        else throw new IllegalArgumentException();
-        if (updatedPlayer.getExperience() != null) player.setExperience(updatedPlayer.getExperience());
-        else throw new IllegalArgumentException();
-        playerRepository.save(player);
-        return player;
+    public Player update(PlayerDTO playerDTO, Long id) {
+        Player player = findOne(id);
+
+        if (playerDTO.getName() != null && isNameLenValid(playerDTO)) {
+            player.setName(playerDTO.getName());
+        }
+        if (playerDTO.getTitle() != null && isTitleLenValid(playerDTO)) {
+            player.setTitle(playerDTO.getTitle());
+        }
+        if (playerDTO.getRace() != null) {
+            player.setRace(playerDTO.getRace());
+        }
+        if (playerDTO.getProfession() != null) {
+            player.setProfession(playerDTO.getProfession());
+        }
+
+        if (playerDTO.getBirthday() != null) {
+            validateBirthday(playerDTO);
+            player.setBirthday(new Date(playerDTO.getBirthday()));
+        }
+
+        if (playerDTO.getBanned() != null) {
+            player.setBanned(playerDTO.getBanned());
+        }
+
+        if (playerDTO.getExperience() != null) {
+            validateExperience(playerDTO);
+            player.setExperience(playerDTO.getExperience());
+        }
+        return playerRepository.saveAndFlush(player);
     }
 
     @Transactional
-    public void delete(Long id) {
+    public ResponseEntity<Player> delete(Long id) {
+        if (id == 0) return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        if (id < 0 || id > playerRepository.findAll().size()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        Optional<Player> foundPLayer = playerRepository.findById(id);
+        if (!foundPLayer.isPresent()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         playerRepository.deleteById(id);
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 
     public boolean isPlayerValid(Player player) {
         return (player != null) && (player.getName() != null) && (player.getTitle() != null) && (!player.getName().isEmpty()) && (player.getName().length() > 0) &&
                 (!player.getTitle().isEmpty()) && (player.getName().length() < 13) && (player.getTitle().length() > 0) && (player.getTitle().length() < 31) &&
-                (player.getExperience() <= 10000000) && (player.getExperience() >= 0) && (player.getBirthday() != null) &&
-                (isProdDateValid(player.getBirthday()));
+                (player.getExperience() <= 10000000) && (player.getExperience() >= 0) && (player.getBirthday() != null) && (player.getBirthday().getTime() > 0);
     }
 
-    private boolean isProdDateValid(Date prodDate) {
-        final Date startProd = getDateForYear(2000);
-        final Date endProd = getDateForYear(3000);
-        return prodDate != null && prodDate.after(startProd) && prodDate.before(endProd);
+    boolean isBirthdayValid(PlayerDTO playerDTO) {
+        if (playerDTO.getBirthday() < 0) {
+            return false;
+        }
+        Date date = new Date(playerDTO.getBirthday());
+        LocalDate localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        int year = localDate.getYear();
+
+        return date.getTime() >= 0 && (year >= 2000 && year <= 3000);
     }
 
-    private Date getDateForYear(int year) {
-        final Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.YEAR, year);
-        return calendar.getTime();
+    public void validateId(Long id) {
+        if (id <= 0) {
+            throw new InvalidIdException();
+        } else if (id > playerRepository.count() || !playerRepository.findById(id).isPresent()) {
+            throw new NoSuchPlayerException();
+        }
+    }
+
+    boolean isNameLenValid(PlayerDTO playerDTO) {
+        int nameLen = playerDTO.getName().trim().length();
+        return nameLen > 0 && nameLen <= 12;
+    }
+
+    boolean isTitleLenValid(PlayerDTO playerDTO) {
+        int titleLen = playerDTO.getTitle().trim().length();
+        return titleLen > 0 && titleLen <= 30;
+    }
+
+    void validateBirthday(PlayerDTO playerDTO) {
+        if (!isBirthdayValid(playerDTO)) {
+            throw new ValidationException();
+        }
+    }
+
+    void validateExperience(PlayerDTO playerDTO) {
+        if (!isExperienceValid(playerDTO)) {
+            throw new ValidationException();
+        }
+    }
+
+    boolean isExperienceValid(PlayerDTO playerDTO) {
+        return playerDTO.getExperience() >= 0 && playerDTO.getExperience() <= 10000000;
     }
 }
